@@ -4,7 +4,7 @@
     <script src="./assets/media-map.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Portfolio · v366 Contact · Public Website</title>
+    <title>Portfolio · v371 Mobile Background Ready</title>
     <link href="./assets/fonts/portfolio-fonts.css" rel="stylesheet">
 
     <script id="site-data">
@@ -2153,7 +2153,7 @@ window.SITE_DATA = {
       "name": "完整作品入口",
       "mode": "workfolder",
       "folderText": "",
-      "linkUrl": "./work_archive_v031_return_to_v366_from_v030.html",
+      "linkUrl": "./work_archive_v036_return_to_v371_from_v035.html",
       "linkTarget": "_blank",
       "folderColor": "#4f61f4",
       "folderMarkColor": "#313131",
@@ -14551,8 +14551,8 @@ window.SITE_DATA = {
 </style>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Crect%20width%3D%2232%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%233f57f6%22/%3E%3Cpath%20d%3D%22M8%209h16L8%2023h16%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%223%22/%3E%3C/svg%3E">
 </head>
-  <body style="" class="shader-ready" data-active-bg-mode="fluid" data-active-bg-media="false">
-    <div id="site-loader" style="opacity: 1; display: flex;" data-preload-task-count="13" data-preload-elapsed="4298" data-preload-complete="true">
+  <body style="" class="" data-active-bg-mode="fluid" data-active-bg-media="false">
+    <div id="site-loader" style="opacity: 1; display: flex;">
       <div class="loader-counter-box">
         <h1 id="loader-count" style="translate: none; rotate: none; scale: none; opacity: 1;">0%</h1>
       </div>
@@ -15932,6 +15932,9 @@ Return:
       let lastTime = 0;
       let shaderAccumulatedTime = 0;
       let animationFrameId;
+      let backgroundContextLost = false;
+      let backgroundLastDraw = -Infinity;
+      let backgroundFrameCount = 0;
       const bgPointerState = {
         x: 0,
         y: 0,
@@ -17114,13 +17117,49 @@ Return:
           updateUniforms();
           return;
         }
-        renderer = new THREE.WebGLRenderer({
+        if (canvas.dataset.lifecycleBound !== "true") {
+          canvas.dataset.lifecycleBound = "true";
+          canvas.addEventListener("webglcontextlost", (event) => {
+            event.preventDefault();
+            backgroundContextLost = true;
+            document.body.classList.remove("shader-ready");
+            canvas.dataset.backgroundState = "context-lost";
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            animationFrameId = 0;
+          });
+          canvas.addEventListener("webglcontextrestored", () => {
+            backgroundContextLost = false;
+            lastTime = 0;
+            backgroundLastDraw = -Infinity;
+            updateResolution();
+            updateUniforms();
+            if (!animationFrameId && !document.hidden)
+              animationFrameId = requestAnimationFrame(animate);
+          });
+          document.addEventListener("visibilitychange", () => {
+            if (document.hidden) {
+              if (animationFrameId) cancelAnimationFrame(animationFrameId);
+              animationFrameId = 0;
+            } else if (!backgroundContextLost && renderer && !animationFrameId) {
+              lastTime = 0;
+              backgroundLastDraw = -Infinity;
+              animationFrameId = requestAnimationFrame(animate);
+            }
+          });
+        }
+        try { renderer = new THREE.WebGLRenderer({
           canvas,
           antialias: false,
-          alpha: true,
+          alpha: false,
+          depth: false,
+          stencil: false,
           preserveDrawingBuffer: true,
           powerPreference: "low-power",
-        });
+        }); } catch (error) {
+          document.body.classList.remove("shader-ready");
+          canvas.dataset.backgroundState = "fallback";
+          return;
+        }
 
         scene = new THREE.Scene();
         camera = new THREE.Camera();
@@ -17342,8 +17381,15 @@ Return:
       }
 
       function animate(time) {
+        animationFrameId = 0;
+        if (document.hidden || backgroundContextLost || !renderer) return;
+        animationFrameId = requestAnimationFrame(animate);
+        const mobile = window.innerWidth <= 768;
+        const interval = mobile ? 1000 / 30 : 0;
+        if (time - backgroundLastDraw < interval - 0.5) return;
+        backgroundLastDraw = time;
         if (lastTime === 0) lastTime = time;
-        const delta = time - lastTime;
+        const delta = Math.min(120, time - lastTime);
         lastTime = time;
         const speed = window.SITE_DATA.theme.fluidSpeed || 0.03;
         shaderAccumulatedTime += delta * 0.001 * speed;
@@ -17352,11 +17398,21 @@ Return:
           updatePointerUniform();
         }
         if (window.SITE_DATA.theme.fluidEnabled) {
-          document.body.classList.add("shader-ready");
-          renderer.render(scene, camera);
-          syncModuleCoverFluidCanvases(renderer.domElement);
+          try {
+            if (renderer.getContext().isContextLost()) return;
+            renderer.render(scene, camera);
+            syncModuleCoverFluidCanvases(renderer.domElement);
+            document.body.classList.add("shader-ready");
+            renderer.domElement.dataset.backgroundState = "ready";
+            renderer.domElement.dataset.backgroundFrameCount = String(++backgroundFrameCount);
+            renderer.domElement.dataset.backgroundFpsLimit = mobile ? "30" : "display";
+          } catch (error) {
+            document.body.classList.remove("shader-ready");
+            renderer.domElement.dataset.backgroundState = "fallback";
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = 0;
+          }
         }
-        animationFrameId = requestAnimationFrame(animate);
       }
 
       function updateUniforms() {
@@ -19070,7 +19126,7 @@ Return:
           Math.min(1, Number(bgState.overlay) || 0),
         );
         const panelMedia = sopVideoUrl
-          ? `<video src="${escapeAttr(sopVideoUrl)}"${sopVideoFallbackAttr} class="sopgrowth-panel-video" data-sop-scroll-video="true" preload="auto" muted playsinline webkit-playsinline x5-video-player-type="h5" tabindex="-1" aria-hidden="true" controlslist="nodownload nofullscreen noremoteplayback" disablepictureinpicture disableremoteplayback></video>`
+          ? `<video data-src="${escapeAttr(sopVideoUrl)}"${sopVideoFallbackAttr} poster="./assets/media/sop-poster-v367.jpg" class="sopgrowth-panel-video" data-sop-scroll-video="true" preload="none" muted playsinline webkit-playsinline x5-video-player-type="h5" tabindex="-1" aria-hidden="true" controlslist="nodownload nofullscreen noremoteplayback" disablepictureinpicture disableremoteplayback></video>`
           : bgState.mode === "image" && bgState.url
             ? `<img src="${escapeAttr(formatUrl(bgState.url))}" class="sopgrowth-panel-image" loading="eager" decoding="async" alt="">`
             : "";
@@ -19458,6 +19514,7 @@ Return:
       );
 
       function renderSite() {
+        releaseSopPreloadVideos();
         const data = window.SITE_DATA;
         const root = document.documentElement;
         updateDesktopSpacingScale();
@@ -21061,6 +21118,7 @@ Return:
         bindTypelistThumbPosition();
         bindTypelistPreviewVisibility();
         bindGalleryLinkGuards();
+        deferMobileVideos();
         initStackcardMediaLoading();
         bindRevealVideoFallbacks();
         initViewportVideoPlayback();
@@ -21246,7 +21304,7 @@ Return:
             };
             video.addEventListener("error", useFallback);
             window.setTimeout(() => {
-              if (video.readyState < 1) useFallback();
+              if (video.getAttribute("src") && video.readyState < 1) useFallback();
             }, 9000);
           });
       }
@@ -21322,6 +21380,7 @@ Return:
           window.STACKCARD_MEDIA_OBSERVER.disconnect();
           window.STACKCARD_MEDIA_OBSERVER = null;
         }
+        if (PORTFOLIO_VIDEO_QUEUE_PAUSED) return;
         const sections = Array.from(
           document.querySelectorAll(".stackcards-section"),
         );
@@ -21352,9 +21411,24 @@ Return:
         window.STACKCARD_MEDIA_OBSERVER = observer;
       }
 
+      function deferMobileVideos() {
+        if (window.innerWidth > 768) return;
+        document.querySelectorAll("#site-content video").forEach(video => {
+          if (video.dataset.sopScrollVideo === "true") return;
+          const src = video.getAttribute("src");
+          if (src) video.dataset.src = src;
+          video.removeAttribute("src");
+          video.removeAttribute("autoplay");
+          video.autoplay = false;
+          video.preload = "none";
+          video.pause();
+          video.load();
+        });
+      }
+
       function initViewportVideoPlayback() {
         const allVideos = Array.from(document.querySelectorAll("video"));
-        const forcedLoopVideos = Array.from(
+        const forcedLoopVideos = window.innerWidth <= 768 ? [] : Array.from(
           document.querySelectorAll(
             '.typelist-thumb video[data-typelist-forced-loop="true"]',
           ),
@@ -21518,14 +21592,14 @@ Return:
         const visibilityScores = new Map();
         const chooseAndPlay = () => {
           window.VIDEO_VIEWPORT_UPDATE_TIMER = 0;
+          if (PORTFOLIO_VIDEO_QUEUE_PAUSED || document.hidden) {
+            allVideos.forEach(pauseVideo); return;
+          }
           let best = null;
           let bestScore = 0;
           const currentScores = new Map();
           autoplayVideos.forEach((video) => {
-            const score = Math.max(
-              visibilityScores.get(video) || 0,
-              getViewportScore(video),
-            );
+            const score = getViewportScore(video);
             currentScores.set(video, score);
             if (score > bestScore) {
               best = video;
@@ -21752,7 +21826,9 @@ Return:
             const { track } = state;
             const dt = Math.min(64, Math.max(0, now - state.last));
             state.last = now;
-            if (state.paused || track.scrollWidth <= track.clientWidth + 2)
+            const rect = track.getBoundingClientRect();
+            if (document.hidden || rect.bottom <= 0 || rect.top >= innerHeight ||
+                state.paused || track.scrollWidth <= track.clientWidth + 2)
               return;
             const speed = Math.max(
               0,
@@ -25201,7 +25277,7 @@ Return:
             item.folderText =
               "WORK ARCHIVE / 2023—2026\n网页、广告与视觉\n完整作品归档";
           if (!String(item.linkUrl || "").trim())
-            item.linkUrl = "./work_archive_v031_return_to_v366_from_v030.html";
+            item.linkUrl = "./work_archive_v036_return_to_v371_from_v035.html";
           if (isFirstWorkFolderSetup) item.linkTarget = "_blank";
           item.folderColor = item.folderColor || "#4f61f4";
           item.folderMarkColor = item.folderMarkColor || "#313131";
@@ -25932,7 +26008,7 @@ Return:
                         <details class="admin-details" open><summary><span>Work 文件夹内容与链接</span><span>CSS 造型</span></summary><div class="admin-details-body">
                             <div class="admin-preset-note">文件夹由代码绘制，不依赖 SVG。电脑端为左文件夹、右文字；右侧文字留空后文件夹自动居中。手机端自动改为上文件夹、下文字。</div>
                             <label>右侧文字（支持空格与 Enter）</label><textarea rows="5" oninput="updateNarrative(${i}, 'folderText', this.value)" placeholder="留空后文件夹自动居中">${escapeAttr(item.folderText || "")}</textarea>
-                            <label style="margin-top:8px;color:#d4af37;">点击跳转链接 / Work 页面</label><input type="text" value="${escapeAttr(item.linkUrl || "")}" oninput="updateNarrative(${i}, 'linkUrl', this.value)" placeholder="./work_archive_v031_return_to_v366_from_v030.html">
+                            <label style="margin-top:8px;color:#d4af37;">点击跳转链接 / Work 页面</label><input type="text" value="${escapeAttr(item.linkUrl || "")}" oninput="updateNarrative(${i}, 'linkUrl', this.value)" placeholder="./work_archive_v036_return_to_v371_from_v035.html">
                             <label style="margin-top:8px;">打开方式</label><select onchange="updateNarrative(${i}, 'linkTarget', this.value)"><option value="_blank" ${(item.linkTarget || "_blank") === "_blank" ? "selected" : ""}>新标签页打开</option><option value="_self" ${item.linkTarget === "_self" ? "selected" : ""}>当前页面打开</option></select>
                             <p class="admin-tip">链接留空时仅展示文件夹，不触发跳转。新标签页会自动加入安全隔离属性。</p>
                         </div></details>
@@ -28639,40 +28715,7 @@ Return:
               if (videoTargetFrame !== videoPresentedFrame)
                 requestVideoFrameApply();
             };
-            // v358: full MP4 cache removes remote range waits during reverse scrubbing.
-            let sopCacheObserver = null;
-            let sopCacheController = null;
-            let sopBlobUrl = "";
-            let sopCacheDisposed = false;
-            const cacheScrollVideo = async () => {
-              if (!scrollVideo || sopCacheDisposed || scrollVideo.dataset.sopBlobState) return;
-              scrollVideo.dataset.sopBlobState = "loading";
-              const sources = [...new Set([scrollVideo.getAttribute("src"), scrollVideo.dataset.fallbackSrc].filter(Boolean))];
-              for (const source of sources) {
-                sopCacheController = new AbortController();
-                const timeout = setTimeout(() => sopCacheController?.abort(), 20000);
-                try {
-                  const response = await fetch(source, { signal: sopCacheController.signal, credentials: "omit", cache: "force-cache" });
-                  if (!response.ok) throw new Error("SOP MP4 HTTP " + response.status);
-                  const blob = await response.blob();
-                  if (sopCacheDisposed) return;
-                  if (!blob.size || blob.size > 32 * 1024 * 1024) throw new Error("SOP MP4 cache size");
-                  sopBlobUrl = URL.createObjectURL(new Blob([blob], { type: "video/mp4" }));
-                  scrollVideo.dataset.sopRemoteSrc = source;
-                  scrollVideo.dataset.sopBlobState = "ready";
-                  scrollVideo.dataset.sopCachedBytes = String(blob.size);
-                  scrollVideo.src = sopBlobUrl;
-                  scrollVideo.load();
-                  return;
-                } catch (error) {
-                  if (sopCacheDisposed) return;
-                } finally {
-                  clearTimeout(timeout);
-                }
-              }
-              // Keep ordinary remote playback available when full-cache fetch is blocked.
-              scrollVideo.dataset.sopBlobState = "remote";
-            };
+            const cacheScrollVideo = () => ensureSopVideoReady(scrollVideo).catch(() => {});
             const handleVideoError = () => {
               if (!scrollVideo || scrollVideo.dataset.sopFallbackTried === "1")
                 return;
@@ -28714,19 +28757,8 @@ Return:
               );
               scrollVideo.addEventListener("seeked", handleVideoSeeked);
               scrollVideo.addEventListener("error", handleVideoError);
-              sopCacheObserver = new IntersectionObserver(entries => {
-                if (entries.some(entry => entry.isIntersecting)) {
-                  sopCacheObserver.disconnect();
-                  cacheScrollVideo();
-                }
-              }, { rootMargin: "200% 0px" });
-              sopCacheObserver.observe(section);
+              cacheScrollVideo();
               if (scrollVideo.readyState >= 1) handleVideoMetadata();
-              else {
-                try {
-                  scrollVideo.load();
-                } catch (err) {}
-              }
             }
             updateProgress();
             requestMobileTitleMask();
@@ -28754,10 +28786,6 @@ Return:
               if (updateRAF) cancelAnimationFrame(updateRAF);
               if (mobileTitleMaskRAF) cancelAnimationFrame(mobileTitleMaskRAF);
               if (videoApplyRAF) cancelAnimationFrame(videoApplyRAF);
-              sopCacheDisposed = true;
-              sopCacheObserver?.disconnect();
-              sopCacheController?.abort();
-              if (sopBlobUrl) URL.revokeObjectURL(sopBlobUrl);
               window.removeEventListener("scroll", requestUpdate);
               window.removeEventListener("resize", handleResize);
               window.removeEventListener("resize", requestMobileTitleMask);
@@ -28904,6 +28932,9 @@ Return:
             if (item.closest(".typelist-thumb")) return false;
             const card = item.closest(".stackcard");
             if (card && getComputedStyle(card).display === "none") return false;
+            if (item.matches('video[data-sop-scroll-video="true"]')) return false;
+            // SOP has its mandatory complete gate. Other mobile videos wait for proximity.
+            if (isMobile && item.tagName === "VIDEO") return false;
             if (item.tagName === "VIDEO") {
               if (videoCount >= maxVideos) return false;
               videoCount += 1;
@@ -29009,6 +29040,8 @@ Return:
 
       function enqueuePortfolioVideo(video, priority = 10) {
         if (!video || !video.isConnected) return;
+        if (video.dataset.sopScrollVideo === "true") return;
+        if (window.innerWidth <= 768 && video.closest(".typelist-thumb")) return;
         const state = video.dataset.portfolioQueueState;
         if (state === "ready" || state === "loading") return;
         const existingId = PORTFOLIO_VIDEO_QUEUE_IDS.get(video);
@@ -29073,7 +29106,11 @@ Return:
         );
         modules.forEach((module) => observer.observe(module));
         modules
-          .slice(0, window.matchMedia("(max-width: 768px)").matches ? 6 : 8)
+          .filter(module => {
+            const rect = module.getBoundingClientRect();
+            const margin = window.innerWidth <= 768 ? 1400 : 2000;
+            return rect.top < innerHeight + margin && rect.bottom > -margin;
+          })
           .forEach((module) => primeModuleMedia(module, 20));
         window.SEQUENTIAL_MODULE_PRELOAD_OBSERVER = observer;
       }
@@ -29131,11 +29168,215 @@ Return:
         document.documentElement.dataset.initialAnimationsPrepared = "true";
       }
 
+// v360: the opening never releases before the complete SOP MP4 and decoder are ready.
+const SOP_PRELOAD_ASSETS = new Map();
+const SOP_PRELOAD_VIDEOS = new Map();
+
+function releaseSopPreloadVideos() {
+  for (const [video, record] of SOP_PRELOAD_VIDEOS) {
+    record.disposed = true;
+    record.cancelDecode?.();
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+    if (record.url) URL.revokeObjectURL(record.url);
+  }
+  SOP_PRELOAD_VIDEOS.clear();
+}
+
+function getSopPreloadAsset(sources) {
+  const key = sources.join('\n');
+  const existing = SOP_PRELOAD_ASSETS.get(key);
+  if (existing) return existing;
+  const asset = {received: 0, total: 0, complete: false};
+  SOP_PRELOAD_ASSETS.set(key, asset);
+  asset.promise = (async () => {
+    let lastError;
+    for (const source of sources) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 90000);
+      asset.received = 0;
+      asset.total = 0;
+      try {
+        const response = await fetch(source, {signal: controller.signal, credentials: 'omit', cache: 'force-cache'});
+        // Partial HTTP responses must never count as a complete MP4.
+        if (response.status !== 200) throw new Error('SOP MP4 HTTP ' + response.status);
+        asset.total = Number(response.headers.get('content-length')) || 0;
+        const limit = 32 * 1024 * 1024;
+        if (asset.total > limit) throw new Error('SOP MP4 exceeds cache limit');
+        let blob;
+        if (response.body?.getReader) {
+          const reader = response.body.getReader(), chunks = [];
+          try {
+            while (true) {
+              const {done, value} = await reader.read();
+              if (done) break;
+              asset.received += value.byteLength;
+              if (asset.received > limit) throw new Error('SOP MP4 exceeds cache limit');
+              chunks.push(value);
+            }
+          } catch (error) {
+            await reader.cancel().catch(() => {});
+            throw error;
+          } finally { reader.releaseLock(); }
+          blob = new Blob(chunks, {type: 'video/mp4'});
+        } else {
+          const downloaded = await response.blob();
+          blob = new Blob([downloaded], {type: 'video/mp4'});
+          asset.received = blob.size;
+        }
+        if (!blob.size || blob.size > limit) throw new Error('Invalid SOP MP4 size');
+        // Content-Length can refer to encoded bytes; compare only identity responses.
+        const encoding = response.headers.get('content-encoding');
+        if (asset.total && (!encoding || encoding === 'identity') && blob.size !== asset.total)
+          throw new Error('Incomplete SOP MP4 body');
+        asset.total = blob.size;
+        asset.complete = true;
+        asset.source = source;
+        return blob;
+      } catch (error) { lastError = error; }
+      finally { clearTimeout(timeout); }
+    }
+    SOP_PRELOAD_ASSETS.delete(key);
+    throw lastError || new Error('No SOP MP4 source');
+  })();
+  return asset;
+}
+
+function waitForSopDecode(video, record, eventName, action, test) {
+  return new Promise((resolve, reject) => {
+    const clean = () => {
+      clearTimeout(timeout);
+      video.removeEventListener(eventName, check);
+      video.removeEventListener('error', failed);
+      record.cancelDecode = null;
+    };
+    const failed = () => { clean(); reject(new Error('SOP MP4 cannot decode')); };
+    const check = () => {
+      if (record.disposed) { clean(); reject(new Error('SOP element replaced')); }
+      else if (test()) { clean(); resolve(); }
+    };
+    const timeout = setTimeout(failed, 20000);
+    record.cancelDecode = () => { clean(); reject(new Error('SOP element replaced')); };
+    video.addEventListener(eventName, check);
+    video.addEventListener('error', failed);
+    try { action(); check(); } catch (error) { clean(); reject(error); }
+  });
+}
+
+function ensureSopVideoReady(video) {
+  const existing = SOP_PRELOAD_VIDEOS.get(video);
+  if (existing) return existing.promise;
+  const sources = [...new Set([video.dataset.sopRemoteSrc || video.dataset.src || video.getAttribute('src'), video.dataset.fallbackSrc]
+    .filter(source => source && !source.startsWith('blob:')))];
+  if (sources[0]) video.dataset.sopRemoteSrc = sources[0];
+  const asset = getSopPreloadAsset(sources);
+  const record = {asset, disposed: false, ready: false, url: ''};
+  SOP_PRELOAD_VIDEOS.set(video, record);
+  video.dataset.sopBlobState = 'loading';
+  record.promise = (async () => {
+    try {
+      const blob = await asset.promise;
+      if (record.disposed || !video.isConnected) throw new Error('SOP element replaced');
+      record.url = URL.createObjectURL(blob);
+      video.dataset.sopRemoteSrc = asset.source;
+      video.dataset.sopCachedBytes = String(blob.size);
+      video.dataset.sopBlobState = 'decoding';
+      video.dataset.portfolioQueueState = 'loading';
+      video.autoplay = false;
+      video.muted = true;
+      video.preload = 'auto';
+      video.pause();
+      await waitForSopDecode(video, record, 'loadeddata', () => {
+        video.src = record.url;
+        video.load();
+      }, () => video.readyState >= 2 && video.videoWidth > 0 && Number.isFinite(video.duration) && video.duration > 0);
+      // Warm both ends of the configured scroll interval while the loader is opaque.
+      const section = video.closest('.sopgrowth-section');
+      const fps = Math.max(1, Math.min(120, +section?.dataset.sopVideoFps || 30));
+      const durationFrames = Math.max(1, Math.floor(video.duration * fps));
+      const frameCount = Math.min(durationFrames, +section?.dataset.sopVideoFrameCount || durationFrames);
+      const start = Math.max(0, Math.min(frameCount - 1, +section?.dataset.sopVideoStartFrame || 0));
+      const end = Math.max(start, Math.min(frameCount - 1, +section?.dataset.sopVideoEndFrame ||
+        frameCount - 1 - (+section?.dataset.sopVideoEndTrimFrames || 0)));
+      for (const target of [end / fps, start / fps]) {
+        await waitForSopDecode(video, record, 'seeked', () => { video.currentTime = target; },
+          () => !video.seeking && video.readyState >= 2 && Math.abs(video.currentTime - target) < 1 / fps);
+      }
+      record.ready = true;
+      video.dataset.sopBlobState = 'ready';
+      video.dataset.sopDecoderReady = 'true';
+      video.dataset.portfolioQueueState = 'ready';
+      return video;
+    } catch (error) {
+      if (!record.disposed) {
+        video.dataset.sopBlobState = 'error';
+        delete video.dataset.portfolioQueueState;
+        delete video.dataset.sopDecoderReady;
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+      }
+      if (record.url) URL.revokeObjectURL(record.url);
+      if (SOP_PRELOAD_VIDEOS.get(video) === record) SOP_PRELOAD_VIDEOS.delete(video);
+      throw error;
+    }
+  })();
+  return record.promise;
+}
+
+function getSopPreloadFraction() {
+  const videos = [...document.querySelectorAll('video[data-sop-scroll-video="true"]')];
+  if (!videos.length) return 1;
+  return videos.reduce((sum, video) => {
+    const record = SOP_PRELOAD_VIDEOS.get(video), asset = record?.asset;
+    return sum + (record?.ready ? 1 : asset?.complete ? 0.95 : asset?.total ?
+      Math.min(0.9, asset.received / asset.total * 0.9) : 0);
+  }, 0) / videos.length;
+}
+
+async function waitForSopLoaderGate(loader) {
+  let status = loader.querySelector('[data-sop-preload-ui]');
+  if (!status) {
+    status = document.createElement('div');
+    status.dataset.sopPreloadUi = 'true';
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    status.style.cssText = 'position:absolute;bottom:14%;left:8%;right:8%;text-align:center;font:14px/1.8 system-ui;color:inherit';
+    loader.append(status);
+  }
+  const retry = document.createElement('button');
+  retry.type = 'button';
+  retry.textContent = '重新加载';
+  retry.style.cssText = 'display:block;margin:12px auto 0;padding:8px 18px;font:inherit;color:inherit;background:transparent;border:1px solid currentColor;border-radius:6px;cursor:pointer';
+  while (true) {
+    loader.dataset.preloadSop = 'loading';
+    status.textContent = '正在准备滚动视频，请稍候…';
+    const videos = [...document.querySelectorAll('video[data-sop-scroll-video="true"]')];
+    try {
+      await Promise.all(videos.map(ensureSopVideoReady));
+      const current = [...document.querySelectorAll('video[data-sop-scroll-video="true"]')];
+      if (current.length !== videos.length || current.some((video, i) => video !== videos[i])) continue;
+      loader.dataset.preloadSop = 'ready';
+      status.remove();
+      return;
+    } catch (error) {
+      if (videos.some(video => !video.isConnected)) continue;
+      loader.dataset.preloadSop = 'error';
+      status.textContent = '滚动视频暂未加载完成，请检查网络后重试。';
+      status.append(retry);
+      await new Promise(resolve => retry.addEventListener('click', resolve, {once: true}));
+    }
+  }
+}
+
       function runLoader() {
         document.body.style.overflow = "hidden";
         const loaderEl = document.getElementById("site-loader");
         const countEl = document.getElementById("loader-count");
         if (!loaderEl || !countEl) return;
+        delete loaderEl.dataset.preloadComplete;
+        delete loaderEl.dataset.preloadElapsed;
 
         // Prepare the hidden start frame before any loader transparency can
         // expose the page. Playback remains deferred until the fade finishes.
@@ -29178,19 +29419,21 @@ Return:
             media.tagName === "VIDEO" ? 8 : 4,
           );
         });
-        loaderEl.dataset.preloadTaskCount = String(tasks.length);
+        const sopGate = waitForSopLoaderGate(loaderEl);
+        const sopWeight = 60;
+        loaderEl.dataset.preloadTaskCount = String(tasks.length + 1);
 
         const loaderStartedAt = performance.now();
         let completedWeight = 0;
         const progressState = { value: 0 };
         const totalWeight = Math.max(
           1,
-          tasks.reduce((sum, task) => sum + task.weight, 0),
+          tasks.reduce((sum, task) => sum + task.weight, 0) + sopWeight,
         );
         const updateProgress = () => {
           const target = Math.min(
             100,
-            Math.round((completedWeight / totalWeight) * 100),
+            Math.round(((completedWeight + sopWeight * getSopPreloadFraction()) / totalWeight) * 100),
           );
           gsap.to(progressState, {
             value: target,
@@ -29204,6 +29447,7 @@ Return:
           });
         };
         updateProgress();
+        const sopProgressTimer = setInterval(updateProgress, 250);
 
         const trackedTasks = tasks.map((task) =>
           Promise.resolve(task.promise).finally(() => {
@@ -29222,7 +29466,9 @@ Return:
         Promise.all([
           minimumDisplay,
           Promise.race([allCriticalReady, globalTimeout]),
+          sopGate,
         ]).then(() => {
+          clearInterval(sopProgressTimer);
           const elapsed = performance.now() - loaderStartedAt;
           loaderEl.dataset.preloadElapsed = String(Math.round(elapsed));
           loaderEl.dataset.preloadComplete = "true";
@@ -29248,12 +29494,17 @@ Return:
                 ease: "power2.inOut",
                 delay: 0.2,
                 onComplete: () => {
-                  PORTFOLIO_VIDEO_QUEUE_PAUSED = false;
-                  initSequentialModulePreloading();
-                  pumpPortfolioVideoQueue();
-                  // Initial states were prepared before the loader fade.
-                  // At this point we only build and play the timelines.
+                  // Measure the complete pinned layout before observing proximity.
+                  // Otherwise compressed, pre-animation sections look near the hero.
                   initAnimations();
+                  requestAnimationFrame(() => requestAnimationFrame(() => {
+                    if (typeof ScrollTrigger !== "undefined") ScrollTrigger.refresh();
+                    PORTFOLIO_VIDEO_QUEUE_PAUSED = false;
+                    initStackcardMediaLoading();
+                    initSequentialModulePreloading();
+                    pumpPortfolioVideoQueue();
+                    window.__requestViewportVideoPlaybackUpdate?.();
+                  }));
                   loaderEl.style.display = "none";
                   document.body.style.overflow = "";
                 },
@@ -32195,11 +32446,13 @@ Return:
           JSON.stringify(window.SITE_DATA, null, 2) +
           ";\n    ";
         const htmlClone = document.documentElement.cloneNode(true);
+        htmlClone.querySelectorAll("[data-sop-preload-ui]").forEach(el => el.remove());
         htmlClone.querySelectorAll('video[data-sop-scroll-video="true"]').forEach(video => {
           if (video.getAttribute("src")?.startsWith("blob:"))
             video.setAttribute("src", video.dataset.sopRemoteSrc || video.dataset.fallbackSrc || "");
           delete video.dataset.sopBlobState;
           delete video.dataset.sopCachedBytes;
+          delete video.dataset.sopDecoderReady;
         });
 
         // Toasts are transient interface feedback. Never persist their visible
